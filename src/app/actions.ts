@@ -27,16 +27,22 @@ function taskPriority(formData: FormData) {
   return priority === "baixa" || priority === "alta" ? priority : "media";
 }
 
+function taskDueAt(rawValue: string) {
+  if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(rawValue)) return null;
+  const parsed = new Date(`${rawValue}:00-03:00`);
+  return Number.isNaN(parsed.getTime()) ? null : parsed.toISOString();
+}
+
 async function authenticatedClient() {
   const supabase = await createClient();
   const { data } = await supabase.auth.getClaims();
   const userId = data?.claims?.sub;
-  if (!userId) throw new Error("Sessão expirada.");
+  if (!userId) redirect("/login?erro=" + encodeURIComponent("Sua sessão expirou. Entre novamente."));
   return { supabase, userId };
 }
 
 export async function loginAction(formData: FormData) {
-  if (!isSupabaseConfigured()) redirect("/dashboard");
+  if (!isSupabaseConfigured()) redirect(`/login?erro=${encodeURIComponent("Configure o Supabase antes de entrar.")}`);
   const supabase = await createClient();
   const { error } = await supabase.auth.signInWithPassword({
     email: value(formData, "email"),
@@ -47,9 +53,9 @@ export async function loginAction(formData: FormData) {
 }
 
 export async function signUpAction(formData: FormData) {
-  if (!isSupabaseConfigured()) redirect("/dashboard");
+  if (!isSupabaseConfigured()) redirect(`/cadastro?erro=${encodeURIComponent("Configure o Supabase antes de criar uma conta.")}`);
   const supabase = await createClient();
-  const { error } = await supabase.auth.signUp({
+  const { data, error } = await supabase.auth.signUp({
     email: value(formData, "email"),
     password: value(formData, "password"),
     options: {
@@ -59,7 +65,8 @@ export async function signUpAction(formData: FormData) {
       },
     },
   });
-  if (error) redirect(`/cadastro?erro=${encodeURIComponent(error.message)}`);
+  if (error) redirect(`/cadastro?erro=${encodeURIComponent("Não foi possível criar a conta. Verifique os dados e tente novamente.")}`);
+  if (data.session) redirect("/dashboard");
   redirect(`/login?mensagem=${encodeURIComponent("Conta criada. Verifique seu e-mail para confirmar o acesso.")}`);
 }
 
@@ -72,7 +79,7 @@ export async function logoutAction() {
 }
 
 export async function createLeadAction(formData: FormData) {
-  if (!isSupabaseConfigured()) redirect("/leads?modo=demo");
+  if (!isSupabaseConfigured()) redirect(`/leads?erro=${encodeURIComponent("Configure o Supabase antes de criar leads.")}`);
   const { supabase, userId } = await authenticatedClient();
   const sourceName = value(formData, "source") || "Cadastro manual";
   const sourceSlug = slugify(sourceName);
@@ -133,7 +140,7 @@ export async function updateLeadStatusAction(leadId: string, status: LeadStatus)
   if (!Object.hasOwn(leadStatusLabels, status)) {
     return { success: false, error: "Etapa inválida." };
   }
-  if (!isSupabaseConfigured()) return { success: true };
+  if (!isSupabaseConfigured()) return { success: false, error: "Supabase não configurado." };
   const { supabase, userId } = await authenticatedClient();
   const { data: statusRecord } = await supabase
     .from("lead_statuses")
@@ -154,7 +161,7 @@ export async function updateLeadStatusAction(leadId: string, status: LeadStatus)
 
 export async function addNoteAction(formData: FormData) {
   const leadId = value(formData, "lead_id");
-  if (!isSupabaseConfigured()) redirect(`/leads/${leadId}?modo=demo`);
+  if (!isSupabaseConfigured()) redirect(`/leads/${leadId}?erro=${encodeURIComponent("Supabase não configurado.")}`);
   const { supabase, userId } = await authenticatedClient();
   await supabase.from("lead_notes").insert({
     lead_id: leadId,
@@ -166,34 +173,41 @@ export async function addNoteAction(formData: FormData) {
 
 export async function createTaskAction(formData: FormData) {
   const leadId = value(formData, "lead_id") || null;
-  if (!isSupabaseConfigured()) redirect(leadId ? `/leads/${leadId}?modo=demo` : "/tarefas?modo=demo");
+  if (!isSupabaseConfigured()) redirect(`/tarefas?erro=${encodeURIComponent("Configure o Supabase antes de criar tarefas.")}`);
   const { supabase, userId } = await authenticatedClient();
-  await supabase.from("lead_tasks").insert({
+  const title = value(formData, "title");
+  const dueAt = taskDueAt(value(formData, "due_at"));
+  if (!title || !dueAt) redirect(`/tarefas?erro=${encodeURIComponent("Preencha a atividade, a data e a hora.")}`);
+  const { error } = await supabase.from("lead_tasks").insert({
     owner_id: userId,
     lead_id: leadId,
-    title: value(formData, "title"),
-    due_at: value(formData, "due_at"),
+    title,
+    due_at: dueAt,
     priority: taskPriority(formData),
   });
+  if (error) redirect(`/tarefas?erro=${encodeURIComponent("Não foi possível criar a tarefa.")}`);
   revalidatePath("/tarefas");
-  if (leadId) revalidatePath(`/leads/${leadId}`);
+  revalidatePath("/dashboard");
+  redirect(`/tarefas?sucesso=${encodeURIComponent("Tarefa adicionada.")}`);
 }
 
 export async function toggleTaskAction(formData: FormData) {
-  if (!isSupabaseConfigured()) redirect("/tarefas?modo=demo");
-  const { supabase } = await authenticatedClient();
-  await supabase
+  if (!isSupabaseConfigured()) redirect(`/tarefas?erro=${encodeURIComponent("Supabase não configurado.")}`);
+  const { supabase, userId } = await authenticatedClient();
+  const { error } = await supabase
     .from("lead_tasks")
     .update({ completed: value(formData, "completed") !== "true" })
-    .eq("id", value(formData, "task_id"));
+    .eq("id", value(formData, "task_id"))
+    .eq("owner_id", userId);
+  if (error) redirect(`/tarefas?erro=${encodeURIComponent("Não foi possível atualizar a tarefa.")}`);
   revalidatePath("/tarefas");
   revalidatePath("/dashboard");
 }
 
 export async function updateProfileAction(formData: FormData) {
-  if (!isSupabaseConfigured()) redirect("/configuracoes?modo=demo");
+  if (!isSupabaseConfigured()) redirect(`/configuracoes?erro=${encodeURIComponent("Supabase não configurado.")}`);
   const { supabase, userId } = await authenticatedClient();
-  await supabase
+  const { error } = await supabase
     .from("profiles")
     .update({
       full_name: value(formData, "full_name"),
@@ -202,7 +216,9 @@ export async function updateProfileAction(formData: FormData) {
       public_form_slug: value(formData, "public_form_slug"),
     })
     .eq("id", userId);
+  if (error) redirect(`/configuracoes?erro=${encodeURIComponent("Não foi possível salvar as configurações.")}`);
   revalidatePath("/configuracoes");
+  redirect(`/configuracoes?sucesso=${encodeURIComponent("Configurações atualizadas.")}`);
 }
 
 export async function capturePublicLeadAction(formData: FormData) {

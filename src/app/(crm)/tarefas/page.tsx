@@ -1,21 +1,27 @@
-import { CalendarCheck2, Check, Clock3, Plus } from "lucide-react";
+import { CalendarCheck2, Check, CircleAlert, Clock3, DatabaseZap, Plus } from "lucide-react";
 import { createTaskAction, toggleTaskAction } from "@/app/actions";
 import { Field, inputClass } from "@/components/form-fields";
 import { PageHeader } from "@/components/page-header";
-import { getLeads, getTasks } from "@/lib/data";
 import { formatDate } from "@/lib/format";
+import { getTasksPageData } from "@/lib/tasks";
 
 export const metadata = { title: "Tarefas" };
+export const dynamic = "force-dynamic";
 
-export default async function TasksPage({ searchParams }: { searchParams: Promise<{ modo?: string }> }) {
-  const [tasks, leads, params] = await Promise.all([getTasks(), getLeads(), searchParams]);
+export default async function TasksPage({ searchParams }: { searchParams: Promise<{ erro?: string; sucesso?: string }> }) {
+  const [result, params] = await Promise.all([getTasksPageData(), searchParams]);
+  if (result.state === "unconfigured") return <TasksState icon={DatabaseZap} title="Conecte as tarefas ao Supabase" description="Configure as variáveis e aplique as migrações para carregar follow-ups reais." />;
+  if (result.state === "error") return <TasksState icon={CircleAlert} title="Tarefas indisponíveis" description={result.message} error />;
+
+  const { tasks, leads } = result.data;
   const pending = tasks.filter((task) => !task.completed);
   const completed = tasks.filter((task) => task.completed);
 
   return (
     <>
       <PageHeader eyebrow="Follow-up" title="Tarefas" description="Organize contatos e compromissos para manter cada oportunidade em movimento." />
-      {params.modo === "demo" && <div className="mb-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">Modo demonstração: conecte o Supabase para salvar alterações.</div>}
+      {params.erro && <div className="mb-4 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">{params.erro}</div>}
+      {params.sucesso && <div className="mb-4 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">{params.sucesso}</div>}
       <div className="grid gap-5 xl:grid-cols-[1fr_360px]">
         <section className="overflow-hidden rounded-2xl border border-line bg-white">
           <div className="flex items-center justify-between border-b border-line px-5 py-4"><div><h2 className="font-bold">Pendentes</h2><p className="mt-1 text-xs text-muted">{pending.length} atividade(s) aguardando ação</p></div><Clock3 className="size-5 text-muted" /></div>
@@ -36,7 +42,7 @@ export default async function TasksPage({ searchParams }: { searchParams: Promis
         <aside className="h-fit rounded-2xl border border-line bg-white p-5">
           <div className="flex items-center gap-3"><span className="grid size-9 place-items-center rounded-xl bg-accent-soft text-brand"><Plus className="size-4" /></span><div><h2 className="font-bold">Nova tarefa</h2><p className="text-xs text-muted">Agende um próximo passo</p></div></div>
           <form action={createTaskAction} className="mt-5 space-y-4">
-            <Field label="Atividade"><input name="title" required placeholder="Ex.: Ligar para o decisor" className={inputClass} /></Field>
+            <Field label="Atividade"><input name="title" required maxLength={240} placeholder="Ex.: Ligar para o decisor" className={inputClass} /></Field>
             <Field label="Lead relacionado"><select name="lead_id" className={inputClass}><option value="">Tarefa geral</option>{leads.map((lead) => <option key={lead.id} value={lead.id}>{lead.name}</option>)}</select></Field>
             <Field label="Data e hora"><input name="due_at" type="datetime-local" required className={inputClass} /></Field>
             <Field label="Prioridade"><select name="priority" className={inputClass}><option value="baixa">Baixa</option><option value="media">Média</option><option value="alta">Alta</option></select></Field>
@@ -46,4 +52,8 @@ export default async function TasksPage({ searchParams }: { searchParams: Promis
       </div>
     </>
   );
+}
+
+function TasksState({ icon: Icon, title, description, error = false }: { icon: typeof DatabaseZap; title: string; description: string; error?: boolean }) {
+  return <><PageHeader eyebrow="Follow-up" title="Tarefas" description="Os follow-ups são carregados diretamente do Supabase." /><section className={`rounded-2xl border bg-white p-6 sm:p-8 ${error ? "border-rose-200" : "border-line"}`}><span className={`grid size-11 place-items-center rounded-2xl ${error ? "bg-rose-50 text-rose-700" : "bg-accent-soft text-brand"}`}><Icon className="size-5" /></span><h2 className="mt-4 text-lg font-bold">{title}</h2><p className="mt-2 max-w-2xl text-sm leading-6 text-muted">{description}</p></section></>;
 }

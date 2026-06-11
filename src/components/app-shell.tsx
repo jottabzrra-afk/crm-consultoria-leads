@@ -9,16 +9,16 @@ import { isSupabaseConfigured } from "@/lib/supabase/config";
 
 export async function AppShell({ children }: { children: React.ReactNode }) {
   const profile = await getCurrentProfile();
-  const demoMode = !isSupabaseConfigured();
-  const displayedName = demoMode ? "Supabase não conectado" : profile.full_name;
-  const displayedCompany = demoMode ? "Configure as variáveis do projeto" : profile.company_name;
+  const disconnected = !isSupabaseConfigured();
+  const displayedName = disconnected ? "Supabase não conectado" : profile?.full_name || "Perfil indisponível";
+  const displayedCompany = disconnected ? "Configure as variáveis do projeto" : profile?.company_name || "Verifique a tabela profiles";
 
   return (
     <div className="min-h-screen bg-background lg:grid lg:grid-cols-[244px_1fr]">
       <aside className="fixed inset-y-0 left-0 z-30 hidden w-[244px] flex-col bg-brand-strong px-4 py-5 lg:flex">
         <div className="px-2"><Brand /></div>
         <div className="mt-9 flex-1"><SidebarNav /></div>
-        {demoMode && (
+        {disconnected && (
           <div className="mb-4 rounded-xl border border-accent/20 bg-accent/10 p-3 text-xs leading-5 text-white/70">
             <span className="font-semibold text-accent">Supabase desconectado</span><br />
             O dashboard não exibirá dados fictícios.
@@ -26,7 +26,7 @@ export async function AppShell({ children }: { children: React.ReactNode }) {
         )}
         <div className="flex items-center gap-3 border-t border-white/8 pt-4">
           <div className="grid size-9 shrink-0 place-items-center rounded-full bg-white/10 text-xs font-bold text-white">
-            {demoMode ? "DB" : initials(profile.full_name)}
+            {disconnected || !profile ? "DB" : initials(profile.full_name)}
           </div>
           <div className="min-w-0 flex-1">
             <p className="truncate text-sm font-semibold text-white">{displayedName}</p>

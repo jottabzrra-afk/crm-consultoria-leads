@@ -3,7 +3,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import type { Database } from "@/lib/database.types";
 import { getSupabaseConfig, isSupabaseConfigured } from "@/lib/supabase/config";
 
-const publicPaths = ["/login", "/cadastro", "/f/"];
+const publicPaths = ["/login", "/cadastro", "/f/", "/auth/"];
 
 export async function updateSession(request: NextRequest) {
   if (!isSupabaseConfigured()) {

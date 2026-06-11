@@ -1,20 +1,28 @@
-import { ExternalLink, Link2, Save, ShieldCheck } from "lucide-react";
+import { CircleAlert, DatabaseZap, ExternalLink, Link2, Save, ShieldCheck } from "lucide-react";
 import Link from "next/link";
 import { updateProfileAction } from "@/app/actions";
 import { CopyLinkButton } from "@/components/copy-link-button";
 import { Field, inputClass } from "@/components/form-fields";
 import { PageHeader } from "@/components/page-header";
 import { getCurrentProfile } from "@/lib/data";
+import { isSupabaseConfigured } from "@/lib/supabase/config";
 
 export const metadata = { title: "Configurações" };
 
-export default async function SettingsPage({ searchParams }: { searchParams: Promise<{ modo?: string }> }) {
+export default async function SettingsPage({ searchParams }: { searchParams: Promise<{ erro?: string; sucesso?: string }> }) {
   const [profile, params] = await Promise.all([getCurrentProfile(), searchParams]);
+  if (!isSupabaseConfigured()) {
+    return <SettingsState icon={DatabaseZap} title="Conecte as configurações ao Supabase" description="Configure as variáveis de ambiente para carregar e salvar os dados reais da sua conta." />;
+  }
+  if (!profile) {
+    return <SettingsState icon={CircleAlert} title="Perfil indisponível" description="Não foi possível carregar seu perfil. Confirme a sessão e o registro correspondente na tabela profiles." error />;
+  }
   const formPath = `/f/${profile.public_form_slug}`;
   return (
     <>
       <PageHeader eyebrow="Conta" title="Configurações" description="Ajuste seus dados e o endereço usado para captar novos leads." />
-      {params.modo === "demo" && <div className="mb-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">Modo demonstração: conecte o Supabase para salvar alterações.</div>}
+      {params.erro && <div className="mb-4 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">{params.erro}</div>}
+      {params.sucesso && <div className="mb-4 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">{params.sucesso}</div>}
       <div className="grid gap-5 xl:grid-cols-[1fr_360px]">
         <form action={updateProfileAction} className="rounded-2xl border border-line bg-white p-5 sm:p-7">
           <div><h2 className="font-bold">Perfil e empresa</h2><p className="mt-1 text-sm text-muted">Informações exibidas na conta e no formulário.</p></div>
@@ -39,4 +47,8 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
       </div>
     </>
   );
+}
+
+function SettingsState({ icon: Icon, title, description, error = false }: { icon: typeof DatabaseZap; title: string; description: string; error?: boolean }) {
+  return <><PageHeader eyebrow="Conta" title="Configurações" description="Os dados da conta são carregados diretamente do Supabase." /><section className={`rounded-2xl border bg-white p-6 sm:p-8 ${error ? "border-rose-200" : "border-line"}`}><span className={`grid size-11 place-items-center rounded-2xl ${error ? "bg-rose-50 text-rose-700" : "bg-accent-soft text-brand"}`}><Icon className="size-5" /></span><h2 className="mt-4 text-lg font-bold">{title}</h2><p className="mt-2 max-w-2xl text-sm leading-6 text-muted">{description}</p></section></>;
 }
